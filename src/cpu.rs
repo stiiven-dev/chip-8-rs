@@ -1,20 +1,19 @@
 const CHIP8_RAM : usize = 4096;
 const REGISTER_COUNT: usize = 16;
 const STACK_SIZE: usize = 16;
-const VIDEO_WIDTH: usize = 64;
-const VIDEO_HEIGHT: usize = 32;
-
-
 
 use crate::font::FONT_SET;
-
+use crate::VIDEO_WIDTH;
+use crate::VIDEO_HEIGHT;
 pub struct CPU{
+    pub vram: [[u8; VIDEO_WIDTH]; VIDEO_HEIGHT],
+    pub vram_changed: bool,
     ram : [u8; CHIP8_RAM],
     v : [u8; REGISTER_COUNT],
     i : usize ,
-    delay_timer : u8,
-    sound_timer : u8,
-    stack : [u8 ; STACK_SIZE],
+    pub delay_timer : u8,
+    pub sound_timer : u8,
+    stack : [u16 ; STACK_SIZE],
     stack_pointer : usize,
     pc : usize ,
 
@@ -23,6 +22,8 @@ pub struct CPU{
 impl CPU {
     pub fn new() -> Self {
         let mut cpu = CPU {
+            vram: [[0; VIDEO_WIDTH]; VIDEO_HEIGHT],
+            vram_changed: false,
             ram : [0; CHIP8_RAM],
             v : [0; REGISTER_COUNT],
             i : 0 ,
@@ -100,14 +101,16 @@ impl CPU {
         self.v[0xF]=0;
 
         for byte in 0..n {
-            let posy = (self.v[vy] as usize + byte) & VIDEO_HEIGHT;
+            let posy = (self.v[vy] as usize + byte) % VIDEO_HEIGHT;
             for bit in 0..8 {
                 let posx = (self.v[vx] as usize + bit) % VIDEO_WIDTH;
-                let old_pix = (self.ram[self.i + byte] >> (7 - bit)) & 1;
-                //todo draw pixel on screen
+                let new_pix = (self.ram[self.i + byte] >> (7 - bit)) & 1;
+                self.v[0xF]|= new_pix & self.vram[posy][posx];
+                self.vram[posy][posx] ^= new_pix;
 
             }
         }
+        self.vram_changed=true;
     }
 
     fn nextpc(&mut self) {
@@ -119,14 +122,23 @@ impl CPU {
     }
 
     fn set_reg(&mut self , x : usize , nn : u8) {
-        self.ram[x] = nn;
+        self.v[x] = nn;
     }
 
     fn add_reg(&mut self , x : usize , nn:u8) {
-        self.ram[x] = self.ram[x].overflowing_add(nn).0;
+        self.v[x] = self.v[x].overflowing_add(nn).0;
     }
 
     fn jump_to(&mut self , j : usize) {
         self.pc = j ;
+    }
+
+    fn clear_screen(&mut self) {
+        for y in 0..VIDEO_HEIGHT {
+            for x in 0..VIDEO_WIDTH {
+                self.vram[y][x] = 0 ;
+            }
+        }
+        self.vram_changed = true;
     }
 }
