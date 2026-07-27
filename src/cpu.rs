@@ -11,13 +11,16 @@ pub struct CPU{
     pub vram: [[u8; VIDEO_WIDTH]; VIDEO_HEIGHT],
     pub vram_changed: bool,
     ram : [u8; CHIP8_RAM],
-    v : [u8; REGISTER_COUNT],
+    pub v : [u8; REGISTER_COUNT],
     i : usize ,
     pub delay_timer : u8,
     pub sound_timer : u8,
     stack : [u16 ; STACK_SIZE],
     stack_pointer : usize,
-    pc : usize ,
+    pub pc : usize ,
+    pub keypad : [bool ; 16],
+    pub keypad_waiting : bool,
+    pub keypad_register : usize,
 
 }
 
@@ -33,7 +36,10 @@ impl CPU {
             sound_timer : 0,
             stack : [0 ; STACK_SIZE],
             stack_pointer : 0 ,
-            pc : 0x200         //All chip-8 programs start here
+            pc : 0x200  ,       //All chip-8 programs start here
+            keypad : [false;16],
+            keypad_waiting: false,
+            keypad_register:0,
         };
         cpu.load_font();
         cpu
@@ -171,10 +177,38 @@ impl CPU {
                 self.nextpc();
                 self.draw(x,y,n);
             },
+            (0xE,_,9,0xE)=> {
+              self.nextpc();
+                if self.keypad[self.v[x] as usize ] { self.nextpc() }
+            },
+            (0xE,_,0xA,0x1)=> {
+              self.nextpc();
+                if ! self.keypad[self.v[x] as usize ] { self.nextpc() }
+            },
+            (0xF,_,0,7)=>{
+                self.nextpc();
+                self.v[x] = self.delay_timer;
+            },
+            (0xF,_,0,0xA)=>{
+                self.keypad_waiting = true;
+                self.keypad_register = x ;
+            },
+            (0xF,_,1,5)=>{
+                self.nextpc();
+                self.delay_timer = self.v[x];
+            },
+            (0xF,_,1,8)=>{
+                self.nextpc();
+                self.sound_timer = self.v[x];
+            }
             (0xF,_,1,0xE) => {
                 self.nextpc();
                 self.i += self.v[x] as usize ;
             },
+            (0xF,_,2,9)=>{
+                self.nextpc();
+                self.i = (self.v[x] as usize) *5;
+            }
             (0xF,_,3,3) => {
                 self.nextpc();
                 let val = self.v[x];
@@ -262,10 +296,12 @@ impl CPU {
 
     pub fn or(&mut self , x:usize , y:usize){
         self.v[x] = self.v[x] | self.v[y];
+        self.v[0xF]=0;
     }
 
     pub fn and(&mut self , x:usize , y:usize){
         self.v[x] = self.v[x] & self.v[y];
+        self.v[0xF]=0;
     }
     #[allow(unused_comparisons)]
     pub fn add(&mut self , x:usize , y:usize){
@@ -276,7 +312,8 @@ impl CPU {
         self.v[0x0f] = if result > 0xFF { 1 } else { 0 };
     }
     pub fn xor(&mut self , x:usize , y:usize){
-        self.v[x] = self.v[x] ^ self.v[y]
+        self.v[x] = self.v[x] ^ self.v[y];
+        self.v[0xF]=0;
     }
 
     pub fn shr(&mut self, x:usize,y:usize){
