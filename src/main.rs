@@ -9,7 +9,7 @@ use std::time::Duration;
 use std::env;
 use drivers::{DisplayDriver,CartridgeDriver};
 use cpu::CPU;
-use crate::drivers::InputDriver;
+use crate::drivers::{AudioDriver, InputDriver};
 
 fn main() {
     let sleep_duration = Duration::from_millis(2);
@@ -18,6 +18,7 @@ fn main() {
     let cartridge_filename = & args [1];
 
     let cartridge = CartridgeDriver::new(cartridge_filename);
+    let audio = AudioDriver::new(&sdl_context);
     let mut display= DisplayDriver::new(&sdl_context);
     let mut input = InputDriver::new(&sdl_context);
     let mut processor = CPU::new();
@@ -59,6 +60,10 @@ fn main() {
             display.draw(&processor.vram);
             processor.vram_changed = false;
         }
+
+        //beep if sound timer positive
+        if processor.sound_timer > 0 { audio.start_beep() }
+        else { audio.end_beep() }
 
         //Sleep to control CPU speed
         thread::sleep(sleep_duration);
